@@ -107,45 +107,6 @@ SmartShopping-DataEngineering/
 - MySQL
 - Power BI
 
-## How To Run
-
-### 1. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure database environment variables
-
-기본값은 `config.py`에 정의되어 있으며 필요 시 아래 값을 조정합니다.
-
-```bash
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=smartshopping
-DB_USER=root
-DB_PASSWORD=root
-DB_DRIVER=mysql
-```
-
-### 3. Run the ETL pipeline
-
-```bash
-python main.py
-```
-
-외부 원본 경로를 지정하려면:
-
-```bash
-python main.py --raw-dir "C:/path/to/source"
-```
-
-PDF 파싱 없이 실행하려면:
-
-```bash
-python main.py --skip-pdfs
-```
-
 ## SQL Analysis Examples
 
 이 프로젝트에서는 아래와 같은 분석을 수행했습니다.
@@ -187,30 +148,7 @@ Power BI 대시보드는 3페이지로 구성했습니다.
 
 ## Automation
 
-이번 프로젝트에서는 자동화를 직접 구현하지 않았습니다.
-
-이유는 다음과 같습니다.
-
-- 우선순위를 ETL 정확도, 데이터 정제, DB 적재, SQL 분석, Power BI 시각화 완성에 두었기 때문
-- 포트폴리오 1차 범위를 운영 자동화보다 데이터 파이프라인 구축 자체에 맞췄기 때문
-
-대신 아래와 같은 확장 방향을 설계했습니다.
-
-```text
-새 파일 확인
-↓
-ETL 실행
-↓
-DB 저장
-↓
-Power BI 갱신
-```
-
-향후에는 아래 방식으로 확장 가능합니다.
-
-- Windows Task Scheduler 또는 cron 기반 배치 실행
-- 신규 CSV / PDF 유입 감지 후 ETL 자동 실행
-- 적재 완료 후 Power BI 데이터 갱신 프로세스 연결
+이번 프로젝트에서는 1차 완성 범위를 운영 자동화보다 데이터 파이프라인 구축 자체에 맞췄기 때문에 자동화를 직접 구현하지 않았습니다. 
 
 ## Problems Solved
 
@@ -230,16 +168,6 @@ Power BI 갱신
 - SQLite 호환 스키마 분기
 - Power BI 리포트 배포 자동화
 - 데이터 품질 검증 리포트 고도화
-
-## Why This Project Matters
-
-이 프로젝트의 핵심은 단순 CSV 분석이 아니라, 반복적으로 들어오는 데이터를 안정적으로 처리하는 데이터 파이프라인을 구축한 데 있습니다.
-
-- 정형 데이터와 비정형 데이터를 함께 수집
-- ETL을 통해 정제 및 표준화
-- 관계형 데이터베이스에 적재
-- SQL 분석과 Power BI 대시보드로 활용
-- 향후 자동화 가능한 구조로 확장
 
 ## Portfolio Summary
 

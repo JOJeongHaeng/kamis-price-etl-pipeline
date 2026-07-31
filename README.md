@@ -21,33 +21,7 @@
 
 ## Architecture
 
-```text
-                   [농산물 물가 데이터]
-
-        CSV / XLSX ------------------ PDF
-             |                        |
-             v                        v
-          pandas                 pdfplumber
-             |                        |
-             +-----------+------------+
-                         |
-                         v
-               ETL (Extract / Transform / Load)
-                         |
-                         v
-                       MySQL
-                         |
-            +------------+-------------+
-            |            |             |
-            v            v             v
-        SQL Analysis  Data Mart    Data Validation
-                         |
-                         v
-                      Power BI
-                         |
-                         v
-               Price Analysis Dashboard
-```
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/597a14e7-f518-4bf9-908f-77526a3d6ee2" />
 
 ## Data Model
 

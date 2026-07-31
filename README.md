@@ -1,6 +1,7 @@
 # SmartShopping Data Engineering Project
 
 전통시장과 대형마트 가격 데이터를 수집·정제·적재하고, SQL 분석과 Power BI 대시보드까지 연결한 데이터 엔지니어링 프로젝트입니다.
+해당 프로젝트는 OpenAI Codex를 사용하여 진행했습니다.
 
 ## Project Overview
 

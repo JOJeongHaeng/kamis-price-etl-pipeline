@@ -1,14 +1,38 @@
-# KAMIS Price ETL Pipeline
+# SmartShopping Price Web Service
 
-전통시장과 대형마트 가격 데이터를 수집·정제·적재하고, SQL 분석과 Power BI 대시보드까지 연결한 데이터 엔지니어링 프로젝트입니다.
-해당 프로젝트는 OpenAI Codex를 사용하여 진행했습니다.
+KAMIS 공공 농산물 가격을 수집·정제·저장하고, 사용자가 웹에서 품목별 도매·소매 가격과 데이터 신선도를 검색할 수 있는 Python 웹서비스입니다.
+
+외부 API 연동부터 ETL, 관계형 데이터 모델링, REST API, 반응형 웹 화면까지 하나의 서비스로 연결했습니다. 평가자는 KAMIS 인증키나 MySQL 없이 SQLite 데모 모드로 바로 실행할 수 있습니다.
+
+## Quick Start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python tools/seed_demo_db.py
+uvicorn web.app:app --reload
+```
+
+Windows PowerShell에서는 가상환경 활성화 명령만 다음과 같이 바꿉니다.
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+- 웹 화면: <http://127.0.0.1:8000>
+- Swagger API 문서: <http://127.0.0.1:8000/docs>
+- 가격 조회 API: <http://127.0.0.1:8000/api/prices>
 
 ## Project Overview
 
-- 목표: 반복적으로 유입되는 농산물 가격 데이터를 안정적으로 정제하고 분석 가능한 형태로 제공
+- 목표: 반복적으로 유입되는 농산물 가격을 안정적으로 정제하고 웹과 API로 제공
 - 정형 데이터 `CSV`, `XLSX`
 - 비정형 데이터 `PDF`
-- MySQL 적재 테이블
+- KAMIS 공공 API
+- MySQL 운영 DB / SQLite 데모 DB
+- FastAPI REST API
+- Jinja2 반응형 웹 화면
 - 분석용 CSV 마트
 - Power BI 대시보드
 
@@ -17,13 +41,76 @@
 - 스프레드시트와 PDF를 함께 수집하는 ETL 파이프라인
 - KAMIS 최근일자 도·소매가격 API 선택적 수집
 - KAMIS 품목·품종·등급·최근가격 스냅샷을 독립된 테이블로 정규화
+- 품목명 부분 검색과 도매·소매 필터
+- 페이지네이션을 지원하는 가격 조회 REST API
+- 조사일 기준 `FRESH` / `CAUTION` / `STALE` 신선도 표시
+- DB 장애 시 내부정보를 숨기는 API·웹 오류 처리
+- 인증키 없이 실행 가능한 6건의 재현 가능한 SQLite 데모 데이터
 - 주차별/월별 분석용 CSV 마트 생성
 - SQL 기반 가격 비교 분석
 - Power BI 기반 시각화 대시보드 구성
 
 ## Architecture
 
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/597a14e7-f518-4bf9-908f-77526a3d6ee2" />
+```mermaid
+flowchart LR
+    K[KAMIS API / XLSX / PDF] --> E[Offline ETL]
+    E --> M[(MySQL)]
+    E --> S[(SQLite Demo)]
+    B[Browser] --> W[FastAPI + Jinja2]
+    C[API Client] --> A[REST API]
+    W --> V[PriceService]
+    A --> V
+    V --> R[PriceRepository]
+    R --> M
+    R --> S
+```
+
+웹 요청 중에는 KAMIS를 호출하지 않습니다. ETL과 웹 조회를 분리해 외부 API 장애나 지연이 사용자 요청에 전파되지 않도록 했습니다. 웹 화면과 REST API는 같은 `PriceService`를 사용하므로 검색 규칙과 응답 데이터가 일관됩니다.
+
+## Web API
+
+품목명, 시장 구분, 페이지를 조합해 조회할 수 있습니다.
+
+```http
+GET /api/prices?q=배추&market_type=retail&page=1&page_size=20
+```
+
+```json
+{
+  "items": [
+    {
+      "item_name": "배추",
+      "variety_name": "여름",
+      "product_cls_name": "소매",
+      "grade_name": "상품",
+      "unit": "포기",
+      "unit_size": "1",
+      "price": 3450,
+      "examined_date": "2026-08-21",
+      "freshness_days": 2,
+      "freshness_status": "FRESH",
+      "freshness_label": "최신"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+`market_type`은 `retail` 또는 `wholesale`을 사용하며, 잘못된 필터와 페이지 값은 HTTP 422로 처리합니다. DB 조회 장애는 HTTP 503과 고정 오류 코드로 반환하고 연결 문자열이나 원본 예외를 노출하지 않습니다.
+
+## Test
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+저장소·서비스 테스트는 실제 인메모리 SQLite를 사용합니다. API와 웹 화면 테스트도 ASGI 요청 전체 경로를 실행하며 검색, 필터, 정렬, 페이지네이션, 신선도 경계, 빈 결과, 입력 오류, DB 장애를 검증합니다.
+
+현재 테스트 스위트는 기존 ETL 회귀 테스트를 포함해 총 59개입니다.
 
 ## Data Model
 
@@ -142,6 +229,17 @@ SmartShopping-DataEngineering/
 ├─ sql/
 │  └─ schema.sql
 ├─ tests/
+├─ web/
+│  ├─ app.py
+│  ├─ database.py
+│  ├─ models.py
+│  ├─ repository.py
+│  ├─ schemas.py
+│  ├─ service.py
+│  ├─ static/
+│  └─ templates/
+├─ tools/
+│  └─ seed_demo_db.py
 ├─ config.py
 ├─ db.py
 ├─ main.py
@@ -151,11 +249,15 @@ SmartShopping-DataEngineering/
 ## Tech Stack
 
 - Python
+- FastAPI
+- Pydantic
+- Jinja2
 - pandas
 - pdfplumber
 - SQLAlchemy
 - PyMySQL
 - MySQL
+- SQLite
 - Power BI
 
 ## SQL Analysis Examples
@@ -199,7 +301,7 @@ Power BI 대시보드는 3페이지로 구성했습니다.
 
 ## Automation
 
-이번 프로젝트에서는 1차 완성 범위를 운영 자동화보다 데이터 파이프라인 구축 자체에 맞췄기 때문에 자동화를 직접 구현하지 않았습니다. 
+웹 요청과 외부 데이터 수집을 분리했습니다. `main.py --api-only`가 KAMIS 데이터를 수집·적재하고 FastAPI는 적재된 스냅샷만 조회합니다. 운영 스케줄링과 클라우드 배포는 현재 범위에 포함하지 않았습니다.
 
 ## Problems Solved
 
@@ -210,16 +312,20 @@ Power BI 대시보드는 3페이지로 구성했습니다.
 - 시장 가격 / 주간 가격 데이터 표준화 문제
 - 주차 메타데이터 추론 문제
 - MySQL 적재용 스키마 정합성 문제
+- MySQL과 SQLite에서 공유할 수 있는 가격 조회 SQL 설계
+- 웹 화면과 REST API의 검색 규칙 일원화
+- 입력 오류, 빈 결과, DB 장애의 안전한 HTTP 처리
+- 조사일 기준 데이터 신선도 경계값 검증
 
 ## Improvements
 
 추가 개선 포인트는 아래와 같습니다.
 
 - 자동화 배치 구현
-- SQLite 호환 스키마 분기
+- 실제 운영 환경 배포와 상태 확인 엔드포인트
 - Power BI 리포트 배포 자동화
 - 데이터 품질 검증 리포트 고도화
 
 ## Portfolio Summary
 
-정형/비정형 가격 데이터를 수집하고, ETL 파이프라인으로 정제한 뒤 MySQL 적재, SQL 분석, Power BI 대시보드까지 연결한 end-to-end 데이터 엔지니어링 프로젝트입니다.
+정형·비정형 농산물 가격과 KAMIS 공공 API를 수집·정제해 MySQL에 적재하고, 동일 데이터를 FastAPI REST API와 반응형 웹 화면으로 제공하는 end-to-end Python 웹 프로젝트입니다. SQLite 데모 모드, 계층화된 조회 구조, 자동 테스트를 통해 실행 가능성과 유지보수성을 함께 보여줍니다.

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmartShopping 농산물 가격 조회</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">KAMIS PRICE INTELLIGENCE</p>
+      <h1>농산물 가격을 한눈에 비교하세요</h1>
+      <p class="intro">공공데이터를 정제해 품목별 도매·소매 가격과 조사일 신선도를 제공합니다.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="search-panel" aria-labelledby="search-heading">
+      <div>
+        <p class="section-kicker">PRICE SEARCH</p>
+        <h2 id="search-heading">가격 검색</h2>
+      </div>
+      <form method="get" action="/" role="search" class="search-form">
+        <div class="field field-grow">
+          <label for="q">품목명</label>
+          <input id="q" name="q" type="search" value="{{ q }}" placeholder="예: 배추, 사과">
+        </div>
+        <div class="field">
+          <label for="market_type">시장 구분</label>
+          <select id="market_type" name="market_type">
+            <option value=""{% if not market_type %} selected{% endif %}>전체</option>
+            <option value="retail"{% if market_type == 'retail' %} selected{% endif %}>소매</option>
+            <option value="wholesale"{% if market_type == 'wholesale' %} selected{% endif %}>도매</option>
+          </select>
+        </div>
+        <button type="submit">조회하기</button>
+      </form>
+    </section>
+
+    <section class="results" aria-labelledby="results-heading">
+      <div class="results-heading">
+        <div>
+          <p class="section-kicker">LATEST SNAPSHOTS</p>
+          <h2 id="results-heading">조회 결과</h2>
+        </div>
+        <p class="result-count" aria-live="polite">총 {{ result.total }}건</p>
+      </div>
+
+      {% if error %}
+        <div class="status status-error" role="alert">{{ error }}</div>
+      {% elif not result.items %}
+        <div class="status">검색 결과가 없습니다. 다른 품목명이나 시장 구분을 선택해 주세요.</div>
+      {% else %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">품목</th>
+                <th scope="col">품종</th>
+                <th scope="col">시장</th>
+                <th scope="col">등급</th>
+                <th scope="col">단위</th>
+                <th scope="col">가격</th>
+                <th scope="col">조사일</th>
+                <th scope="col">신선도</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in result.items %}
+                <tr>
+                  <td class="item-name">{{ item.item_name }}</td>
+                  <td>{{ item.variety_name or '-' }}</td>
+                  <td>{{ item.product_cls_name }}</td>
+                  <td>{{ item.grade_name }}</td>
+                  <td>{{ item.unit_size }}{{ item.unit }}</td>
+                  <td class="price">{{ "{:,}".format(item.price) }}원</td>
+                  <td>{{ item.examined_date.isoformat() }}</td>
+                  <td>
+                    <span class="freshness freshness-{{ item.freshness_status|lower }}">
+                      {{ item.freshness_label }} · {{ item.freshness_days }}일
+                    </span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+
+      {% if previous_url or next_url %}
+        <nav class="pagination" aria-label="검색 결과 페이지">
+          {% if previous_url %}<a href="{{ previous_url }}">이전</a>{% endif %}
+          <span>{{ result.page }} / {{ result.total_pages }}</span>
+          {% if next_url %}<a href="{{ next_url }}">다음</a>{% endif %}
+        </nav>
+      {% endif %}
+    </section>
+  </main>
+
+  <footer class="container site-footer">
+    <p>Source: KAMIS 공공데이터 · API 문서: <a href="/docs">/docs</a></p>
+  </footer>
+</body>
+</html>

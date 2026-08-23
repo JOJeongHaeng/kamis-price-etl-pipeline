@@ -1,24 +1,83 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import SQLAlchemyError
 
 from web.database import create_web_engine
-from web.models import PriceFilters
+from web.models import PriceFilters, PricePage
 from web.repository import PriceRepository
 from web.schemas import PricePageResponse
 from web.service import PriceService
 
 
 logger = logging.getLogger(__name__)
+WEB_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
 
 def create_app(service: PriceService | None = None) -> FastAPI:
     application = FastAPI(title="SmartShopping Price API", version="1.0.0")
+    application.mount(
+        "/static",
+        StaticFiles(directory=str(WEB_DIR / "static")),
+        name="static",
+    )
     price_service = service or PriceService(PriceRepository(create_web_engine()))
+
+    @application.get("/", response_class=HTMLResponse, name="price_page")
+    async def price_page(
+        request: Request,
+        q: str | None = Query(default=None, max_length=100),
+        market_type: Literal["retail", "wholesale"] | None = None,
+        page: int = Query(default=1, ge=1),
+    ) -> HTMLResponse:
+        filters = PriceFilters(
+            query=q,
+            market_type=market_type,
+            page=page,
+            page_size=20,
+        )
+        error: str | None = None
+        status_code = 200
+        try:
+            result = price_service.search(filters)
+        except SQLAlchemyError:
+            logger.exception("Price page query failed")
+            result = PricePage((), page, 20, 0, 0)
+            error = "가격 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+            status_code = 503
+
+        query_values = {"q": q or "", "market_type": market_type or ""}
+        previous_url = (
+            str(request.url.include_query_params(page=page - 1, **query_values))
+            if page > 1
+            else None
+        )
+        next_url = (
+            str(request.url.include_query_params(page=page + 1, **query_values))
+            if page < result.total_pages
+            else None
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "result": result,
+                "q": q or "",
+                "market_type": market_type or "",
+                "error": error,
+                "previous_url": previous_url,
+                "next_url": next_url,
+            },
+            status_code=status_code,
+        )
 
     @application.get("/api/prices", response_model=PricePageResponse)
     async def list_prices(

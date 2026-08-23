@@ -1,4 +1,4 @@
-# SmartShopping Data Engineering Project
+# KAMIS Price ETL Pipeline
 
 전통시장과 대형마트 가격 데이터를 수집·정제·적재하고, SQL 분석과 Power BI 대시보드까지 연결한 데이터 엔지니어링 프로젝트입니다.
 해당 프로젝트는 OpenAI Codex를 사용하여 진행했습니다.
@@ -15,6 +15,7 @@
 ## Key Features
 
 - 스프레드시트와 PDF를 함께 수집하는 ETL 파이프라인
+- KAMIS 최근일자 도·소매가격 API 선택적 수집
 - 품목, 주차, 시장 가격, 주간 리포트 테이블로 정규화
 - 주차별/월별 분석용 CSV 마트 생성
 - SQL 기반 가격 비교 분석
@@ -26,13 +27,14 @@
 
 ## Data Model
 
-주요 테이블은 아래 5개입니다.
+주요 테이블은 아래 6개입니다.
 
 - `Item`: 품목명, 단위
 - `Week`: 시작일, 종료일, 주차, 연도, 월
 - `MarketPrice`: 전통시장 가격, 대형마트 가격
 - `WeeklyPrice`: 전주 가격, 현재 가격, 등락률
 - `WeeklyReport`: 주간 요약, 주요 이슈, 제철 식재료
+- `DailyPrice`: KAMIS 품목별 최근 도·소매 조사 가격
 
 ERD 관점 관계는 아래와 같습니다.
 
@@ -41,6 +43,27 @@ ERD 관점 관계는 아래와 같습니다.
 - `Week` 1:N `MarketPrice`
 - `Week` 1:N `WeeklyPrice`
 - `Week` 1:1 `WeeklyReport`
+- `Item` 1:N `DailyPrice`
+
+## KAMIS API
+
+공공데이터포털의 [한국농수산식품유통공사 최근일자 도·소매가격정보 API](https://www.data.go.kr/data/15156063/openapi.do)를 사용합니다. 활용신청 후 발급받은 일반 인증키를 환경변수로 설정하고 `--include-api`를 사용합니다.
+
+```bash
+export KAMIS_SERVICE_KEY="공공데이터포털에서 발급받은 일반 인증키"
+python main.py --include-api
+```
+
+PowerShell에서는 다음과 같이 실행합니다.
+
+```powershell
+$env:KAMIS_SERVICE_KEY="공공데이터포털에서 발급받은 일반 인증키"
+.\.venv\Scripts\python.exe main.py --include-api
+```
+
+API 가격은 기존 주간 가격이나 전통시장/대형마트 비교 가격에 섞지 않고 `DailyPrice` 테이블과 `data/processed/api_price/daily_price.csv`에 별도로 저장합니다. API의 페이지당 최대 건수인 1,000건씩 전체 페이지를 순회합니다.
+
+인증키와 DB 비밀번호는 저장소에 커밋하지 않습니다. 필요한 환경변수 목록은 `.env.example`을 참고하세요.
 
 ## ETL Flow
 

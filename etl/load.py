@@ -122,8 +122,12 @@ def load_pipeline_outputs(
     weekly_report_df: pd.DataFrame,
     weekly_df: pd.DataFrame,
     market_df: pd.DataFrame,
+    daily_price_df: pd.DataFrame | None = None,
     engine=default_engine,
 ) -> dict[str, int]:
+    if daily_price_df is None:
+        daily_price_df = pd.DataFrame()
+
     with engine.begin() as conn:
         item_id_map: dict[tuple[str, str], int] = {}
         for row in item_df.to_dict("records"):
@@ -222,10 +226,119 @@ def load_pipeline_outputs(
                 )
             market_written += 1
 
+        daily_written = 0
+        for row in daily_price_df.to_dict("records"):
+            payload = {
+                "product_no": row["product_no"],
+                "price_date": row["price_date"],
+                "product_cls_code": row["product_cls_code"],
+                "product_cls_name": row["product_cls_name"],
+                "category_code": _normalize_scalar(row.get("category_code")),
+                "category_name": _normalize_scalar(row.get("category_name")),
+                "variety_code": row["variety_code"],
+                "variety_name": _normalize_scalar(row.get("variety_name")),
+                "grade_code": row["grade_code"],
+                "grade_name": _normalize_scalar(row.get("grade_name")),
+                "unit": row["unit"],
+                "unit_size": row["unit_size"],
+                "price": int(row["price"]),
+                "kg_price": _normalize_scalar(row.get("kg_price")),
+                "day_before_price": _normalize_scalar(row.get("day_before_price")),
+                "day_before_kg_price": _normalize_scalar(row.get("day_before_kg_price")),
+                "week_before_price": _normalize_scalar(row.get("week_before_price")),
+                "week_before_kg_price": _normalize_scalar(row.get("week_before_kg_price")),
+                "month_before_price": _normalize_scalar(row.get("month_before_price")),
+                "month_before_kg_price": _normalize_scalar(row.get("month_before_kg_price")),
+                "year_before_price": _normalize_scalar(row.get("year_before_price")),
+                "year_before_kg_price": _normalize_scalar(row.get("year_before_kg_price")),
+                "source_name": row["source_name"],
+                "collected_at": row["collected_at"],
+                "item_id": item_id_map[(row["item_name"], row["unit"])],
+            }
+            existing = conn.execute(
+                text(
+                    """
+                    SELECT daily_price_id
+                    FROM DailyPrice
+                    WHERE product_no = :product_no
+                      AND price_date = :price_date
+                      AND product_cls_code = :product_cls_code
+                      AND variety_code = :variety_code
+                      AND grade_code = :grade_code
+                      AND unit = :unit
+                      AND unit_size = :unit_size
+                    """
+                ),
+                payload,
+            ).scalar()
+            if existing is None:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO DailyPrice (
+                            product_no, price_date, product_cls_code, product_cls_name,
+                            category_code, category_name, variety_code, variety_name,
+                            grade_code, grade_name, unit, unit_size, price, kg_price,
+                            day_before_price, day_before_kg_price,
+                            week_before_price, week_before_kg_price,
+                            month_before_price, month_before_kg_price,
+                            year_before_price, year_before_kg_price,
+                            source_name, collected_at, item_id
+                        ) VALUES (
+                            :product_no, :price_date, :product_cls_code, :product_cls_name,
+                            :category_code, :category_name, :variety_code, :variety_name,
+                            :grade_code, :grade_name, :unit, :unit_size, :price, :kg_price,
+                            :day_before_price, :day_before_kg_price,
+                            :week_before_price, :week_before_kg_price,
+                            :month_before_price, :month_before_kg_price,
+                            :year_before_price, :year_before_kg_price,
+                            :source_name, :collected_at, :item_id
+                        )
+                        """
+                    ),
+                    payload,
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE DailyPrice
+                        SET product_cls_name = :product_cls_name,
+                            category_code = :category_code,
+                            category_name = :category_name,
+                            variety_name = :variety_name,
+                            grade_name = :grade_name,
+                            price = :price,
+                            kg_price = :kg_price,
+                            day_before_price = :day_before_price,
+                            day_before_kg_price = :day_before_kg_price,
+                            week_before_price = :week_before_price,
+                            week_before_kg_price = :week_before_kg_price,
+                            month_before_price = :month_before_price,
+                            month_before_kg_price = :month_before_kg_price,
+                            year_before_price = :year_before_price,
+                            year_before_kg_price = :year_before_kg_price,
+                            source_name = :source_name,
+                            collected_at = :collected_at,
+                            item_id = :item_id
+                        WHERE product_no = :product_no
+                          AND price_date = :price_date
+                          AND product_cls_code = :product_cls_code
+                          AND variety_code = :variety_code
+                          AND grade_code = :grade_code
+                          AND unit = :unit
+                          AND unit_size = :unit_size
+                        """
+                    ),
+                    payload,
+                )
+            daily_written += 1
+
     return {
         "items_upserted": len(item_id_map),
         "weeks_upserted": len(week_id_map),
         "weekly_reports_upserted": len(weekly_report_df),
         "weekly_prices_written": weekly_written,
         "market_prices_written": market_written,
+        "daily_prices_written": daily_written,
     }

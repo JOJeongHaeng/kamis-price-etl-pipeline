@@ -61,3 +61,40 @@ CREATE TABLE IF NOT EXISTS WeeklyReport (
         ON DELETE NO ACTION
         ON UPDATE NO ACTION
 );
+
+CREATE TABLE IF NOT EXISTS DailyPrice (
+    daily_price_id BIGINT AUTO_INCREMENT NOT NULL,
+    product_no VARCHAR(30) NOT NULL,
+    price_date DATE NOT NULL,
+    product_cls_code CHAR(2) NOT NULL,
+    product_cls_name VARCHAR(20) NOT NULL,
+    category_code VARCHAR(20) NULL,
+    category_name VARCHAR(50) NULL,
+    variety_code VARCHAR(20) NOT NULL,
+    variety_name VARCHAR(100) NULL,
+    grade_code VARCHAR(20) NOT NULL,
+    grade_name VARCHAR(50) NULL,
+    unit VARCHAR(30) NOT NULL,
+    unit_size VARCHAR(30) NOT NULL,
+    price INTEGER NOT NULL,
+    kg_price INTEGER NULL,
+    day_before_price INTEGER NULL,
+    day_before_kg_price INTEGER NULL,
+    week_before_price INTEGER NULL,
+    week_before_kg_price INTEGER NULL,
+    month_before_price INTEGER NULL,
+    month_before_kg_price INTEGER NULL,
+    year_before_price INTEGER NULL,
+    year_before_kg_price INTEGER NULL,
+    source_name VARCHAR(50) NOT NULL,
+    collected_at DATETIME NOT NULL,
+    item_id INTEGER NOT NULL,
+    PRIMARY KEY (daily_price_id),
+    UNIQUE KEY uq_dailyprice_identity (
+        product_no, variety_code, grade_code, price_date,
+        product_cls_code, unit, unit_size
+    ),
+    CONSTRAINT fk_dailyprice_item FOREIGN KEY (item_id) REFERENCES Item (item_id)
+        ON DELETE NO ACTION
+        ON UPDATE NO ACTION
+);

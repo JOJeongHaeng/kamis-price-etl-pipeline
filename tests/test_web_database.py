@@ -1,3 +1,6 @@
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from sqlalchemy import text
@@ -39,6 +42,20 @@ class WebDatabaseTests(unittest.TestCase):
         self.assertEqual(first_count, 6)
         self.assertEqual(second_count, 6)
         self.assertEqual(stored, 6)
+
+    def test_seed_script_runs_from_project_root(self):
+        project_root = Path(__file__).resolve().parents[1]
+
+        result = subprocess.run(
+            [sys.executable, "tools/seed_demo_db.py"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "Seeded 6 price snapshots.")
 
 
 if __name__ == "__main__":

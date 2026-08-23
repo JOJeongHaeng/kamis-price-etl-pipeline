@@ -16,7 +16,7 @@
 
 - 스프레드시트와 PDF를 함께 수집하는 ETL 파이프라인
 - KAMIS 최근일자 도·소매가격 API 선택적 수집
-- 품목, 주차, 시장 가격, 주간 리포트 테이블로 정규화
+- KAMIS 품목·품종·등급·최근가격 스냅샷을 독립된 테이블로 정규화
 - 주차별/월별 분석용 CSV 마트 생성
 - SQL 기반 가격 비교 분석
 - Power BI 기반 시각화 대시보드 구성
@@ -27,14 +27,19 @@
 
 ## Data Model
 
-주요 테이블은 아래 6개입니다.
+기존 파일 ETL 테이블과 KAMIS API 테이블을 분리해 운영합니다.
 
 - `Item`: 품목명, 단위
 - `Week`: 시작일, 종료일, 주차, 연도, 월
 - `MarketPrice`: 전통시장 가격, 대형마트 가격
 - `WeeklyPrice`: 전주 가격, 현재 가격, 등락률
 - `WeeklyReport`: 주간 요약, 주요 이슈, 제철 식재료
-- `DailyPrice`: KAMIS 품목별 최근 도·소매 조사 가격
+- `Category`: KAMIS 부류 코드와 이름
+- `Product`: KAMIS 품목 코드와 이름
+- `ProductVariant`: 품목별 품종 코드와 이름
+- `Grade`: 등급 코드와 이름
+- `RecentPriceSnapshot`: 조사일·도소매 구분·단위별 가격과 과거 비교가격
+- `KAMISPriceAnalysis`: 품목 정보를 결합하고 조사일 신선도 상태를 계산하는 분석용 View
 
 ERD 관점 관계는 아래와 같습니다.
 
@@ -43,25 +48,48 @@ ERD 관점 관계는 아래와 같습니다.
 - `Week` 1:N `MarketPrice`
 - `Week` 1:N `WeeklyPrice`
 - `Week` 1:1 `WeeklyReport`
-- `Item` 1:N `DailyPrice`
+- `Category` 1:N `Product`
+- `Product` 1:N `ProductVariant`
+- `ProductVariant` 1:N `RecentPriceSnapshot`
+- `Grade` 1:N `RecentPriceSnapshot`
 
 ## KAMIS API
 
-공공데이터포털의 [한국농수산식품유통공사 최근일자 도·소매가격정보 API](https://www.data.go.kr/data/15156063/openapi.do)를 사용합니다. 활용신청 후 발급받은 일반 인증키를 환경변수로 설정하고 `--include-api`를 사용합니다.
+공공데이터포털의 [한국농수산식품유통공사 최근일자 도·소매가격정보 API](https://www.data.go.kr/data/15156063/openapi.do)를 사용합니다. API만 실행할 때는 `--api-only`를 권장합니다.
 
 ```bash
 export KAMIS_SERVICE_KEY="공공데이터포털에서 발급받은 일반 인증키"
-python main.py --include-api
+python main.py --api-only
 ```
 
 PowerShell에서는 다음과 같이 실행합니다.
 
 ```powershell
 $env:KAMIS_SERVICE_KEY="공공데이터포털에서 발급받은 일반 인증키"
-.\.venv\Scripts\python.exe main.py --include-api
+.\.venv\Scripts\python.exe main.py --api-only
 ```
 
-API 가격은 기존 주간 가격이나 전통시장/대형마트 비교 가격에 섞지 않고 `DailyPrice` 테이블과 `data/processed/api_price/daily_price.csv`에 별도로 저장합니다. API의 페이지당 최대 건수인 1,000건씩 전체 페이지를 순회합니다.
+API 가격은 기존 주간 가격에 섞지 않고 `Category → Product → ProductVariant → RecentPriceSnapshot ← Grade` 구조로 저장합니다. CSV는 `data/processed/api_price/` 아래의 `category.csv`, `product.csv`, `product_variant.csv`, `grade.csv`, `recent_price_snapshot.csv`로 생성합니다. API의 페이지당 최대 건수인 1,000건씩 전체 페이지를 순회합니다.
+
+`--api-only`는 기존 XLSX/PDF 산출물을 건드리지 않고 API만 처리합니다. 기존 파일 ETL과 API를 함께 실행하려면 `--include-api`를 사용합니다.
+
+### 가격 신선도
+
+`KAMISPriceAnalysis` View는 조사일과 조회 당일의 차이를 기준으로 가격 상태를 계산합니다.
+
+- `FRESH` / 최신: 30일 이내
+- `CAUTION` / 주의: 31일 초과 1년 이내
+- `STALE` / 오래됨: 1년 초과
+
+`is_analysis_ready = 1`을 적용하면 1년 이내 가격만 분석할 수 있습니다. 원본 행은 삭제하지 않으므로 기준을 바꾸거나 과거 자료를 별도로 분석할 수 있습니다.
+
+```sql
+SELECT category_name, item_name, variety_name, product_cls_name,
+       examined_date, freshness_status, unit, unit_size, price
+FROM KAMISPriceAnalysis
+WHERE is_analysis_ready = 1
+ORDER BY examined_date DESC, item_name;
+```
 
 인증키와 DB 비밀번호는 저장소에 커밋하지 않습니다. 필요한 환경변수 목록은 `.env.example`을 참고하세요.
 

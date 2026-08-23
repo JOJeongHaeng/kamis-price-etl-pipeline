@@ -82,6 +82,30 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(parse_weekly_report.call_count, 0)
             self.assertEqual(parse_price_tables_from_pdf.call_count, 0)
 
+    def test_run_pipeline_api_only_skips_legacy_sources_and_outputs(self):
+        response = {"body": {"items": {"item": [{
+            "exmn_ymd": "20260821", "se_cd": "01", "se_nm": "소매",
+            "ctgry_cd": "200", "ctgry_nm": "채소류", "item_cd": "211", "item_nm": "배추",
+            "vrty_cd": "01", "vrty_nm": "여름", "grd_cd": "04", "grd_nm": "상품",
+            "unit": "포기", "unit_sz": "1", "exmn_dd_prc": "3450",
+        }]}}}
+        with TemporaryDirectory() as temp_dir, \
+            patch("etl.pipeline.API_OUTPUT_DIR", Path(temp_dir)), \
+            patch("etl.pipeline.collect_spreadsheet_files") as collect_spreadsheets, \
+            patch("etl.pipeline.collect_report_files") as collect_reports, \
+            patch("etl.pipeline.fetch_recent_kamis_prices", return_value=response), \
+            patch("etl.pipeline.ensure_schema"), \
+            patch("etl.pipeline.load_kamis_outputs", return_value={"snapshots_written": 1}), \
+            patch("etl.pipeline.load_pipeline_outputs") as load_legacy:
+            summary = run_pipeline(api_only=True)
+
+        collect_spreadsheets.assert_not_called()
+        collect_reports.assert_not_called()
+        load_legacy.assert_not_called()
+        self.assertEqual(summary["recent_price_snapshot_rows"], 1)
+        self.assertIn("recent_price_snapshot_csv", summary["outputs"])
+        self.assertNotIn("weekly_csv", summary["outputs"])
+
 
 if __name__ == "__main__":
     unittest.main()

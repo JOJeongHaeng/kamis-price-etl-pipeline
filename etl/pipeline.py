@@ -9,9 +9,9 @@ import pandas as pd
 from config import API_OUTPUT_DIR, EXTRACTED_DATA_DIR, MART_OUTPUT_DIR, MARKET_OUTPUT_DIR, RAW_DATA_DIR, SCHEMA_PATH, SOURCE_DATA_DIR, WEEKLY_OUTPUT_DIR, ensure_directories
 from db import engine as default_engine
 from etl.api_extract import fetch_recent_kamis_prices
-from etl.api_transform import DAILY_PRICE_COLUMNS, normalize_kamis_prices
+from etl.api_transform import RECENT_PRICE_SNAPSHOT_COLUMNS, create_kamis_dimensions, normalize_kamis_prices
 from etl.extract import collect_report_files, collect_spreadsheet_files, load_excel_file
-from etl.load import ensure_schema, load_pipeline_outputs
+from etl.load import ensure_schema, load_kamis_outputs, load_pipeline_outputs
 from etl.pdf_prices import parse_price_tables_from_pdf
 from etl.report import derive_week_metadata, parse_weekly_report
 from etl.transform import build_analysis_mart, create_item_df, normalize_market_price, normalize_weekly_price
@@ -128,11 +128,13 @@ def run_pipeline(
     engine=default_engine,
     skip_pdfs: bool = False,
     include_api: bool = False,
+    api_only: bool = False,
 ) -> dict[str, object]:
     ensure_directories()
+    include_api = include_api or api_only
     source_dir = Path(raw_dir) if raw_dir is not None else SOURCE_DATA_DIR
-    spreadsheets = collect_spreadsheet_files(source_dir, EXTRACTED_DATA_DIR)
-    report_files = [] if skip_pdfs else collect_report_files(source_dir, EXTRACTED_DATA_DIR)
+    spreadsheets = [] if api_only else collect_spreadsheet_files(source_dir, EXTRACTED_DATA_DIR)
+    report_files = [] if api_only or skip_pdfs else collect_report_files(source_dir, EXTRACTED_DATA_DIR)
 
     weekly_frames: list[pd.DataFrame] = []
     market_frames: list[pd.DataFrame] = []
@@ -140,10 +142,10 @@ def run_pipeline(
     report_records: list[dict[str, object]] = []
     skipped_files: list[str] = []
 
-    daily_price_df = (
+    snapshot_df = (
         normalize_kamis_prices(fetch_recent_kamis_prices())
         if include_api
-        else pd.DataFrame(columns=DAILY_PRICE_COLUMNS)
+        else pd.DataFrame(columns=RECENT_PRICE_SNAPSHOT_COLUMNS)
     )
 
     for path in spreadsheets:
@@ -186,34 +188,43 @@ def run_pipeline(
     week_df = pd.DataFrame(week_records).drop_duplicates().sort_values(["year", "week_no", "start_date"]).reset_index(drop=True) if week_records else pd.DataFrame(columns=["start_date", "end_date", "week_no", "year", "month"])
     weekly_report_df = pd.DataFrame(report_records).drop_duplicates(subset=["start_date", "end_date", "week_no", "year", "month"]).reset_index(drop=True) if report_records else pd.DataFrame(columns=["start_date", "end_date", "week_no", "year", "month", "summary", "season_food", "issue", "source_file"])
     item_df = create_item_df(weekly_df, market_df)
-    if not daily_price_df.empty:
-        api_item_df = daily_price_df[["item_name", "unit"]].rename(columns={"item_name": "name"})
-        item_df = (
-            pd.concat([item_df, api_item_df], ignore_index=True)
-            .drop_duplicates(subset=["name", "unit"])
-            .sort_values(["name", "unit"])
-            .reset_index(drop=True)
-        )
     analysis_mart_df = build_analysis_mart(weekly_df, market_df)
 
-    weekly_csv = _write_csv(weekly_df, WEEKLY_OUTPUT_DIR, "weekly_price.csv")
-    market_csv = _write_csv(market_df, MARKET_OUTPUT_DIR, "market_price.csv")
-    item_csv = _write_csv(item_df, MART_OUTPUT_DIR, "item.csv")
-    week_csv = _write_csv(week_df, MART_OUTPUT_DIR, "week.csv")
-    report_csv = _write_csv(weekly_report_df, MART_OUTPUT_DIR, "weekly_report.csv")
-    mart_csv = _write_csv(analysis_mart_df, MART_OUTPUT_DIR, "price_analysis_mart.csv")
-    daily_price_csv = _write_csv(daily_price_df, API_OUTPUT_DIR, "daily_price.csv")
-
     ensure_schema(SCHEMA_PATH, engine=engine)
-    load_summary = load_pipeline_outputs(
-        item_df,
-        week_df,
-        weekly_report_df,
-        weekly_df,
-        market_df,
-        daily_price_df=daily_price_df,
-        engine=engine,
-    )
+    outputs: dict[str, str] = {}
+    load_summary: dict[str, int] = {}
+
+    if not api_only:
+        output_frames = (
+            ("weekly_csv", weekly_df, WEEKLY_OUTPUT_DIR, "weekly_price.csv"),
+            ("market_csv", market_df, MARKET_OUTPUT_DIR, "market_price.csv"),
+            ("item_csv", item_df, MART_OUTPUT_DIR, "item.csv"),
+            ("week_csv", week_df, MART_OUTPUT_DIR, "week.csv"),
+            ("weekly_report_csv", weekly_report_df, MART_OUTPUT_DIR, "weekly_report.csv"),
+            ("analysis_csv", analysis_mart_df, MART_OUTPUT_DIR, "price_analysis_mart.csv"),
+        )
+        outputs.update({key: str(_write_csv(frame, directory, name)) for key, frame, directory, name in output_frames})
+        load_summary.update(load_pipeline_outputs(item_df, week_df, weekly_report_df, weekly_df, market_df, engine=engine))
+
+    dimensions = create_kamis_dimensions(snapshot_df) if include_api else {
+        "category": pd.DataFrame(columns=["category_code", "category_name"]),
+        "product": pd.DataFrame(columns=["item_code", "item_name", "category_code"]),
+        "product_variant": pd.DataFrame(columns=["item_code", "variety_code", "variety_name"]),
+        "grade": pd.DataFrame(columns=["grade_code", "grade_name"]),
+    }
+    if include_api:
+        api_frames = (
+            ("recent_price_snapshot_csv", snapshot_df, "recent_price_snapshot.csv"),
+            ("category_csv", dimensions["category"], "category.csv"),
+            ("product_csv", dimensions["product"], "product.csv"),
+            ("product_variant_csv", dimensions["product_variant"], "product_variant.csv"),
+            ("grade_csv", dimensions["grade"], "grade.csv"),
+        )
+        outputs.update({key: str(_write_csv(frame, API_OUTPUT_DIR, name)) for key, frame, name in api_frames})
+        load_summary.update(load_kamis_outputs(
+            dimensions["category"], dimensions["product"], dimensions["product_variant"],
+            dimensions["grade"], snapshot_df, engine=engine,
+        ))
 
     return {
         "source_dir": str(source_dir),
@@ -225,16 +236,12 @@ def run_pipeline(
         "week_rows": len(week_df),
         "weekly_report_rows": len(weekly_report_df),
         "analysis_rows": len(analysis_mart_df),
-        "daily_price_rows": len(daily_price_df),
+        "category_rows": len(dimensions["category"]),
+        "product_rows": len(dimensions["product"]),
+        "variant_rows": len(dimensions["product_variant"]),
+        "grade_rows": len(dimensions["grade"]),
+        "recent_price_snapshot_rows": len(snapshot_df),
         "skipped_files": skipped_files,
         "load_summary": load_summary,
-        "outputs": {
-            "weekly_csv": str(weekly_csv),
-            "market_csv": str(market_csv),
-            "item_csv": str(item_csv),
-            "week_csv": str(week_csv),
-            "weekly_report_csv": str(report_csv),
-            "analysis_csv": str(mart_csv),
-            "daily_price_csv": str(daily_price_csv),
-        },
+        "outputs": outputs,
     }

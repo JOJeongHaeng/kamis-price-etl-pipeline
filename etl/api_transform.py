@@ -6,8 +6,8 @@ from typing import Any
 import pandas as pd
 
 
-DAILY_PRICE_COLUMNS = [
-    "product_no", "item_name", "unit", "unit_size",
+RECENT_PRICE_SNAPSHOT_COLUMNS = [
+    "item_code", "item_name", "unit", "unit_size",
     "category_code", "category_name", "variety_code", "variety_name",
     "grade_code", "grade_name", "product_cls_code", "product_cls_name",
     "price_date", "price", "kg_price", "day_before_price",
@@ -58,7 +58,7 @@ def normalize_kamis_prices(
 
     for row in _price_rows(response):
         record = {
-            "product_no": _clean_text(row.get("item_cd")),
+            "item_code": _clean_text(row.get("item_cd")),
             "item_name": _clean_text(row.get("item_nm")),
             "unit": _clean_text(row.get("unit")),
             "unit_size": _clean_text(row.get("unit_sz")),
@@ -84,21 +84,55 @@ def normalize_kamis_prices(
             "source_name": "PUBLIC_DATA_KAMIS",
             "collected_at": collected_text,
         }
-        required = ("product_no", "item_name", "unit", "product_cls_code", "price_date")
+        required = ("item_code", "item_name", "unit", "product_cls_code", "price_date")
         if any(not record[key] for key in required) or record["price"] is None:
             continue
         records.append(record)
 
     if not records:
-        return pd.DataFrame(columns=DAILY_PRICE_COLUMNS)
+        return pd.DataFrame(columns=RECENT_PRICE_SNAPSHOT_COLUMNS)
 
     unique_key = [
-        "product_no", "variety_code", "grade_code", "price_date",
+        "item_code", "variety_code", "grade_code", "price_date",
         "product_cls_code", "unit", "unit_size",
     ]
     return (
-        pd.DataFrame.from_records(records, columns=DAILY_PRICE_COLUMNS)
+        pd.DataFrame.from_records(records, columns=RECENT_PRICE_SNAPSHOT_COLUMNS)
         .drop_duplicates(subset=unique_key, keep="last")
-        .sort_values(["price_date", "product_cls_code", "product_no", "variety_code", "grade_code"])
+        .sort_values(["price_date", "product_cls_code", "item_code", "variety_code", "grade_code"])
         .reset_index(drop=True)
     )
+
+
+def create_kamis_dimensions(snapshot_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Build normalized KAMIS dimensions from canonical snapshot rows."""
+    category_df = (
+        snapshot_df[["category_code", "category_name"]]
+        .drop_duplicates(subset=["category_code"], keep="last")
+        .sort_values("category_code")
+        .reset_index(drop=True)
+    )
+    product_df = (
+        snapshot_df[["item_code", "item_name", "category_code"]]
+        .drop_duplicates(subset=["item_code"], keep="last")
+        .sort_values("item_code")
+        .reset_index(drop=True)
+    )
+    variant_df = (
+        snapshot_df[["item_code", "variety_code", "variety_name"]]
+        .drop_duplicates(subset=["item_code", "variety_code"], keep="last")
+        .sort_values(["item_code", "variety_code"])
+        .reset_index(drop=True)
+    )
+    grade_df = (
+        snapshot_df[["grade_code", "grade_name"]]
+        .drop_duplicates(subset=["grade_code"], keep="last")
+        .sort_values("grade_code")
+        .reset_index(drop=True)
+    )
+    return {
+        "category": category_df,
+        "product": product_df,
+        "product_variant": variant_df,
+        "grade": grade_df,
+    }

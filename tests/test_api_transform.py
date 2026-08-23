@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import unittest
 
-from etl.api_transform import DAILY_PRICE_COLUMNS, normalize_kamis_prices
+from etl.api_transform import RECENT_PRICE_SNAPSHOT_COLUMNS, create_kamis_dimensions, normalize_kamis_prices
 
 
 class ApiTransformTests(unittest.TestCase):
@@ -29,7 +29,8 @@ class ApiTransformTests(unittest.TestCase):
             collected_at=datetime(2026, 8, 23, 1, 2, 3, tzinfo=timezone.utc),
         )
 
-        self.assertEqual(list(result.columns), DAILY_PRICE_COLUMNS)
+        self.assertEqual(list(result.columns), RECENT_PRICE_SNAPSHOT_COLUMNS)
+        self.assertEqual(result.loc[0, "item_code"], "211")
         self.assertEqual(result.loc[0, "item_name"], "배추")
         self.assertEqual(result.loc[0, "variety_name"], "여름")
         self.assertEqual(result.loc[0, "price"], 3450)
@@ -53,7 +54,23 @@ class ApiTransformTests(unittest.TestCase):
     def test_normalize_returns_canonical_empty_frame(self):
         result = normalize_kamis_prices({"body": {"items": {"item": []}}})
         self.assertTrue(result.empty)
-        self.assertEqual(list(result.columns), DAILY_PRICE_COLUMNS)
+        self.assertEqual(list(result.columns), RECENT_PRICE_SNAPSHOT_COLUMNS)
+
+    def test_create_kamis_dimensions_removes_repeated_attributes(self):
+        snapshot = normalize_kamis_prices({"body": {"items": {"item": [{
+            "exmn_ymd": "20260821", "se_cd": "01", "se_nm": "소매",
+            "ctgry_cd": "200", "ctgry_nm": "채소류", "item_cd": "211",
+            "item_nm": "배추", "vrty_cd": "01", "vrty_nm": "여름",
+            "grd_cd": "04", "grd_nm": "상품", "unit": "포기", "unit_sz": "1",
+            "exmn_dd_prc": "3450",
+        }]}}})
+
+        dimensions = create_kamis_dimensions(snapshot)
+
+        self.assertEqual(dimensions["category"].to_dict("records"), [{"category_code": "200", "category_name": "채소류"}])
+        self.assertEqual(dimensions["product"].loc[0, "item_code"], "211")
+        self.assertEqual(dimensions["product_variant"].loc[0, "variety_code"], "01")
+        self.assertEqual(dimensions["grade"].loc[0, "grade_name"], "상품")
 
 
 if __name__ == "__main__":

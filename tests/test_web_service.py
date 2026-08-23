@@ -89,6 +89,16 @@ class WebServiceTests(unittest.TestCase):
             (366, "STALE", "오래됨"),
         )
 
+    def test_freshness_uses_calendar_year_during_leap_year(self):
+        self.assertEqual(
+            classify_freshness(date(2027, 3, 1), date(2028, 3, 1)),
+            (366, "CAUTION", "주의"),
+        )
+        self.assertEqual(
+            classify_freshness(date(2027, 2, 28), date(2028, 3, 1)),
+            (367, "STALE", "오래됨"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

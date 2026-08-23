@@ -55,6 +55,10 @@ def classify_freshness(examined_date: date, today: date) -> tuple[int, str, str]
     days = max((today - examined_date).days, 0)
     if days <= 30:
         return days, "FRESH", "최신"
-    if days <= 365:
+    try:
+        one_year_ago = today.replace(year=today.year - 1)
+    except ValueError:
+        one_year_ago = today.replace(year=today.year - 1, day=28)
+    if examined_date >= one_year_ago:
         return days, "CAUTION", "주의"
     return days, "STALE", "오래됨"

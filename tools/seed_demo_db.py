@@ -139,5 +139,9 @@ def seed_database(engine: Engine) -> int:
 
 
 if __name__ == "__main__":
-    count = seed_database(create_web_engine())
+    web_engine = create_web_engine()
+    try:
+        count = seed_database(web_engine)
+    finally:
+        web_engine.dispose()
     print(f"Seeded {count} price snapshots.")

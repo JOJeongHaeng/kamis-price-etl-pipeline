@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -23,6 +24,7 @@ class WebDatabaseTests(unittest.TestCase):
 
     def test_create_web_engine_executes_sqlite_query(self):
         engine = create_web_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
 
         with engine.connect() as connection:
             result = connection.execute(text("SELECT 1")).scalar_one()
@@ -31,6 +33,7 @@ class WebDatabaseTests(unittest.TestCase):
 
     def test_seed_database_creates_repeatable_sample_rows(self):
         engine = create_web_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
 
         first_count = seed_database(engine)
         second_count = seed_database(engine)
@@ -52,10 +55,12 @@ class WebDatabaseTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+            env={**os.environ, "PYTHONWARNINGS": "always"},
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "Seeded 6 price snapshots.")
+        self.assertNotIn("ResourceWarning", result.stderr)
 
 
 if __name__ == "__main__":

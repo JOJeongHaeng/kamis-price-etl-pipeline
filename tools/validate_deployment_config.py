@@ -93,7 +93,7 @@ def validate_render(config: dict[str, Any], python_version: str) -> list[str]:
         "autoDeploy": True,
         "buildCommand": "pip install -r requirements.txt",
         "startCommand": (
-            "python tools/seed_demo_db.py && "
+            "python main.py && "
             "uvicorn web.app:app --host 0.0.0.0 --port $PORT"
         ),
         "healthCheckPath": "/health",
@@ -113,6 +113,23 @@ def validate_render(config: dict[str, Any], python_version: str) -> list[str]:
         violations,
         isinstance(service, dict) and "disk" not in service,
         "free demo service must not define a persistent disk",
+    )
+    env_vars = service.get("envVars", []) if isinstance(service, dict) else []
+    environment = {
+        variable.get("key"): variable
+        for variable in env_vars
+        if isinstance(variable, dict)
+    }
+    _expect(
+        violations,
+        environment.get("DB_DRIVER", {}).get("value") == "sqlite",
+        "Render service must use the shared SQLite database",
+    )
+    kamis_key = environment.get("KAMIS_SERVICE_KEY", {})
+    _expect(
+        violations,
+        kamis_key.get("sync") is False and "value" not in kamis_key,
+        "KAMIS_SERVICE_KEY must be an unsynced Render secret",
     )
     return violations
 

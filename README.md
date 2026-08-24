@@ -28,6 +28,7 @@ https://smartshopping-lffu.onrender.com/docs
 
 OpenAI Codex 활용
 요구사항을 정의한 뒤 Codex를 활용해 구현과 리팩터링을 진행하고, 생성된 코드의 동작을 직접 검토·테스트하며 프로젝트를 완성했습니다.
+
 ---
 
 # 🎯 프로젝트 목표

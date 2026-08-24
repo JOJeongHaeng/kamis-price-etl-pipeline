@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BeforeValidator
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,6 +23,10 @@ from web.service import PriceService
 logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+PageMarketTypeQuery = Annotated[
+    Literal["retail", "wholesale"] | None,
+    BeforeValidator(lambda value: None if value == "" else value),
+]
 
 
 def create_app(
@@ -63,7 +68,7 @@ def create_app(
     async def price_page(
         request: Request,
         q: str | None = Query(default=None, max_length=100),
-        market_type: Literal["retail", "wholesale"] | None = None,
+        market_type: PageMarketTypeQuery = None,
         page: int = Query(default=1, ge=1),
     ) -> HTMLResponse:
         filters = PriceFilters(

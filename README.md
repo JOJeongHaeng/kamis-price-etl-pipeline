@@ -1,8 +1,21 @@
 # SmartShopping Price Web Service
 
+[![Test](https://github.com/JOJeongHaeng/kamis-price-etl-pipeline/actions/workflows/test.yml/badge.svg)](https://github.com/JOJeongHaeng/kamis-price-etl-pipeline/actions/workflows/test.yml)
+
 KAMIS 공공 농산물 가격을 수집·정제·저장하고, 사용자가 웹에서 품목별 도매·소매 가격과 데이터 신선도를 검색할 수 있는 Python 웹서비스입니다.
 
 외부 API 연동부터 ETL, 관계형 데이터 모델링, REST API, 반응형 웹 화면까지 하나의 서비스로 연결했습니다. 평가자는 KAMIS 인증키나 MySQL 없이 SQLite 데모 모드로 바로 실행할 수 있습니다.
+
+## Live Demo
+
+- 웹 화면: <https://smartshopping-lffu.onrender.com/>
+- 가격 조회 API: <https://smartshopping-lffu.onrender.com/api/prices>
+- Swagger API 문서: <https://smartshopping-lffu.onrender.com/docs>
+- 헬스체크: <https://smartshopping-lffu.onrender.com/health>
+
+Render 무료 인스턴스가 휴면 상태이면 첫 요청에서 서비스가 깨어나는 동안 약 1분이 걸릴 수 있습니다. 배포 프로세스는 시작할 때 SQLite 스키마와 6건의 데모 데이터를 다시 생성합니다.
+
+![SmartShopping Render 배포 화면](docs/images/smartshopping-render.png)
 
 ## Quick Start
 

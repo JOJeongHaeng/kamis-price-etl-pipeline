@@ -2,54 +2,15 @@ import unittest
 
 from sqlalchemy import create_engine, text
 
-from etl.load import load_kamis_outputs
-
-
-SCHEMA = """
-CREATE TABLE Category (category_code TEXT PRIMARY KEY, category_name TEXT NOT NULL);
-CREATE TABLE Product (item_code TEXT PRIMARY KEY, item_name TEXT NOT NULL, category_code TEXT NOT NULL);
-CREATE TABLE ProductVariant (
-    variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_code TEXT NOT NULL,
-    variety_code TEXT NOT NULL,
-    variety_name TEXT,
-    UNIQUE(item_code, variety_code)
-);
-CREATE TABLE Grade (grade_code TEXT PRIMARY KEY, grade_name TEXT NOT NULL);
-CREATE TABLE RecentPriceSnapshot (
-    snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    variant_id INTEGER NOT NULL,
-    grade_code TEXT NOT NULL,
-    examined_date TEXT NOT NULL,
-    product_cls_code TEXT NOT NULL,
-    product_cls_name TEXT NOT NULL,
-    unit TEXT NOT NULL,
-    unit_size TEXT NOT NULL,
-    price INTEGER NOT NULL,
-    kg_price INTEGER,
-    day_before_price INTEGER,
-    day_before_kg_price INTEGER,
-    week_before_price INTEGER,
-    week_before_kg_price INTEGER,
-    month_before_price INTEGER,
-    month_before_kg_price INTEGER,
-    year_before_price INTEGER,
-    year_before_kg_price INTEGER,
-    source_name TEXT NOT NULL,
-    collected_at TEXT NOT NULL,
-    UNIQUE(variant_id, grade_code, examined_date, product_cls_code, unit, unit_size)
-);
-"""
+from config import SCHEMA_PATH
+from etl.load import ensure_schema, load_kamis_outputs
 
 
 class KamisLoadTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine("sqlite:///:memory:")
         self.addCleanup(self.engine.dispose)
-        with self.engine.begin() as connection:
-            for statement in SCHEMA.split(";"):
-                if statement.strip():
-                    connection.execute(text(statement))
+        ensure_schema(SCHEMA_PATH, engine=self.engine)
 
     def test_load_kamis_outputs_upserts_row_lists(self):
         categories = [{"category_code": "200", "category_name": "채소류"}]

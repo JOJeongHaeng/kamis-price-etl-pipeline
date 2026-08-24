@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import text
 
+from config import SQLITE_SCHEMA_PATH
 from db import engine as default_engine
 
 
@@ -13,7 +14,8 @@ def _normalize_scalar(value: object) -> object | None:
 
 
 def ensure_schema(schema_path: Path, engine=default_engine) -> None:
-    sql = schema_path.read_text(encoding="utf-8")
+    effective_path = SQLITE_SCHEMA_PATH if engine.dialect.name == "sqlite" else schema_path
+    sql = effective_path.read_text(encoding="utf-8")
     statements = [statement.strip() for statement in sql.split(";") if statement.strip()]
     with engine.begin() as conn:
         for statement in statements:

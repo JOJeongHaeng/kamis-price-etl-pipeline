@@ -11,54 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from web.database import create_web_engine
 
-
-SCHEMA_STATEMENTS = (
-    """
-    CREATE TABLE IF NOT EXISTS Category (
-        category_code TEXT PRIMARY KEY,
-        category_name TEXT NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS Product (
-        item_code TEXT PRIMARY KEY,
-        item_name TEXT NOT NULL,
-        category_code TEXT NOT NULL REFERENCES Category(category_code)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS ProductVariant (
-        variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        item_code TEXT NOT NULL REFERENCES Product(item_code),
-        variety_code TEXT NOT NULL,
-        variety_name TEXT,
-        UNIQUE(item_code, variety_code)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS Grade (
-        grade_code TEXT PRIMARY KEY,
-        grade_name TEXT NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS RecentPriceSnapshot (
-        snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        variant_id INTEGER NOT NULL REFERENCES ProductVariant(variant_id),
-        grade_code TEXT NOT NULL REFERENCES Grade(grade_code),
-        examined_date DATE NOT NULL,
-        product_cls_code TEXT NOT NULL,
-        product_cls_name TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        unit_size TEXT NOT NULL,
-        price INTEGER NOT NULL,
-        kg_price INTEGER,
-        source_name TEXT NOT NULL,
-        collected_at DATETIME NOT NULL,
-        UNIQUE(variant_id, grade_code, examined_date, product_cls_code, unit, unit_size)
-    )
-    """,
-)
+SQLITE_SCHEMA_PATH = PROJECT_ROOT / "sql" / "sqlite_schema.sql"
 
 CATEGORIES = (
     {"code": "100", "name": "식량작물"},
@@ -93,8 +46,10 @@ def seed_database(engine: Engine) -> int:
     with engine.begin() as connection:
         if engine.dialect.name == "sqlite":
             connection.execute(text("PRAGMA foreign_keys = ON"))
-        for statement in SCHEMA_STATEMENTS:
-            connection.execute(text(statement))
+        schema = SQLITE_SCHEMA_PATH.read_text(encoding="utf-8")
+        for statement in schema.split(";"):
+            if statement.strip():
+                connection.execute(text(statement))
 
         for table in ("RecentPriceSnapshot", "ProductVariant", "Product", "Category", "Grade"):
             connection.execute(text(f"DELETE FROM {table}"))

@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from web.database import create_web_engine
+from web.health import database_is_ready
 from web.models import PriceFilters, PricePage
 from web.repository import PriceRepository
 from web.schemas import PricePageResponse
@@ -22,7 +24,10 @@ WEB_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
 
-def create_app(service: PriceService | None = None) -> FastAPI:
+def create_app(
+    service: PriceService | None = None,
+    health_engine: Engine | None = None,
+) -> FastAPI:
     application = FastAPI(title="SmartShopping Price API", version="1.0.0")
     application.mount(
         "/static",
@@ -30,6 +35,23 @@ def create_app(service: PriceService | None = None) -> FastAPI:
         name="static",
     )
     price_service = service or PriceService(PriceRepository(create_web_engine()))
+    readiness_engine = health_engine or create_web_engine()
+
+    @application.get("/health")
+    async def health():
+        try:
+            if database_is_ready(readiness_engine):
+                return {"status": "ok", "database": "ready"}
+            logger.error("Database health check found no price snapshots")
+        except SQLAlchemyError:
+            logger.exception("Database health check failed")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "database": "unavailable",
+            },
+        )
 
     @application.get("/", response_class=HTMLResponse, name="price_page")
     async def price_page(

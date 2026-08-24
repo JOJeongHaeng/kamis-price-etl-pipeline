@@ -29,7 +29,9 @@
 - `tests/test_web_health.py`: exercise seeded, empty, missing-table, and SQLAlchemy-error states through the real ASGI app.
 - `.github/workflows/test.yml`: run the required test, compile, and seed gates on the three approved triggers.
 - `tests/test_deployment_config.py`: execute the deployment-config loader and assert semantic CI/Render contracts.
+- `tests/test_deployment_smoke.py`: execute the real seeded Uvicorn process and assert all four public routes.
 - `tools/validate_deployment_config.py`: safely load YAML files and validate their consumer-visible deployment settings.
+- `tools/smoke_test_deployment.py`: reproduce the Render seed/start sequence against a temporary SQLite database.
 - `.python-version`: pin the deployment family to Python 3.13.
 - `render.yaml`: define the free Render service, build/start commands, health path, and main auto-deploy behavior.
 - `requirements.txt`: include the YAML parser used by configuration validation.
@@ -178,7 +180,7 @@ Add `validate_render` with semantic dictionary checks. Create `.python-version` 
 
 - [ ] **Step 4: Verify Render configuration and live process**
 
-Run the configuration test, then seed the database and start Uvicorn with a temporary `PORT`. Poll the actual process and assert HTTP 200 for `/health`, `/`, `/api/prices`, and `/docs`; assert `/health` returns the exact ready JSON and `/api/prices` reports six rows. Stop the temporary process after verification.
+Create `tools/smoke_test_deployment.py` and `tests/test_deployment_smoke.py`. The script must seed a temporary SQLite database, start Uvicorn with `sys.executable`, poll until ready without a fixed startup sleep, assert HTTP 200 for `/health`, `/`, `/api/prices`, and `/docs`, assert `/health` returns the exact ready JSON and `/api/prices` reports six rows, and always terminate the child process. Run: `python -m unittest tests.test_deployment_smoke -v` and expect PASS.
 
 - [ ] **Step 5: Run the full local CI contract and commit Task 3**
 

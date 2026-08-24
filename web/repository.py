@@ -5,7 +5,7 @@ from sqlalchemy import Engine, text
 from web.models import PriceFilters
 
 
-MARKET_NAMES = {"retail": "소매", "wholesale": "도매"}
+MARKET_NAMES = {"retail": "소매", "wholesale": "중도매"}
 
 FROM_SQL = """
 FROM RecentPriceSnapshot s

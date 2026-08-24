@@ -1,6 +1,8 @@
 from datetime import date
 import unittest
 
+from sqlalchemy import text
+
 from tools.seed_demo_db import seed_database
 from web.database import create_web_engine
 from web.models import PriceFilters, classify_freshness
@@ -34,6 +36,27 @@ class WebServiceTests(unittest.TestCase):
 
         self.assertEqual(len(result.items), 3)
         self.assertEqual({item.product_cls_name for item in result.items}, {"소매"})
+
+    def test_search_maps_wholesale_filter_to_kamis_middle_wholesale_name(self):
+        with self.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE RecentPriceSnapshot "
+                    "SET product_cls_name = '중도매' "
+                    "WHERE product_cls_code = '02'"
+                )
+            )
+
+        result = self.service.search(
+            PriceFilters(market_type="wholesale", page=1, page_size=20),
+            today=date(2026, 8, 23),
+        )
+
+        self.assertEqual(len(result.items), 3)
+        self.assertEqual(
+            {item.product_cls_name for item in result.items},
+            {"중도매"},
+        )
 
     def test_search_orders_by_date_then_item_name(self):
         result = self.service.search(

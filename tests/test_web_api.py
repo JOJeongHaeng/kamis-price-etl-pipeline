@@ -68,6 +68,14 @@ class WebApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 422)
 
+    async def test_api_rejects_empty_market_type(self):
+        response = await self.client.get(
+            "/api/prices",
+            params={"market_type": ""},
+        )
+
+        self.assertEqual(response.status_code, 422)
+
     async def test_api_rejects_page_size_above_limit(self):
         response = await self.client.get("/api/prices", params={"page_size": 101})
 

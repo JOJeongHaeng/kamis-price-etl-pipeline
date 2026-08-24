@@ -39,6 +39,17 @@ class WebPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("배추", response.text)
         self.assertIn("신선도", response.text)
 
+    async def test_page_treats_empty_market_type_as_all_markets(self):
+        response = await self.client.get(
+            "/",
+            params={"q": "배추", "market_type": ""},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("배추", response.text)
+        self.assertIn("소매", response.text)
+        self.assertIn("도매", response.text)
+
     async def test_page_renders_empty_result_message(self):
         response = await self.client.get("/", params={"q": "없는품목"})
 

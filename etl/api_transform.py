@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from typing import Any
-
-import pandas as pd
 
 
 RECENT_PRICE_SNAPSHOT_COLUMNS = [
@@ -37,24 +36,44 @@ def _normalize_price(value: Any) -> int | None:
     text = _clean_text(value).replace(",", "").replace("원", "")
     if not text or text in {"-", "null", "None"}:
         return None
-    number = pd.to_numeric(text, errors="coerce")
-    return None if pd.isna(number) else int(round(float(number)))
+    try:
+        return int(Decimal(text).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+    except InvalidOperation:
+        return None
 
 
 def _normalize_date(value: Any) -> str | None:
-    parsed = pd.to_datetime(_clean_text(value), errors="coerce")
-    return None if pd.isna(parsed) else parsed.date().isoformat()
+    text = _clean_text(value)
+    for date_format in ("%Y-%m-%d", "%Y%m%d", "%Y/%m/%d", "%Y.%m.%d"):
+        try:
+            return datetime.strptime(text, date_format).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _snapshot_key(record: dict[str, object]) -> tuple[object, ...]:
+    return tuple(record[column] for column in (
+        "item_code", "variety_code", "grade_code", "price_date",
+        "product_cls_code", "unit", "unit_size",
+    ))
+
+
+def _snapshot_sort_key(record: dict[str, object]) -> tuple[object, ...]:
+    return tuple(record[column] for column in (
+        "price_date", "product_cls_code", "item_code", "variety_code", "grade_code",
+    ))
 
 
 def normalize_kamis_prices(
     response: dict[str, Any],
     *,
     collected_at: datetime | None = None,
-) -> pd.DataFrame:
+) -> list[dict[str, object]]:
     """Convert the public-data recent price response into canonical rows."""
     collected = collected_at or datetime.now(timezone.utc)
     collected_text = collected.astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-    records: list[dict[str, Any]] = []
+    records_by_key: dict[tuple[object, ...], dict[str, object]] = {}
 
     for row in _price_rows(response):
         record = {
@@ -87,52 +106,34 @@ def normalize_kamis_prices(
         required = ("item_code", "item_name", "unit", "product_cls_code", "price_date")
         if any(not record[key] for key in required) or record["price"] is None:
             continue
-        records.append(record)
+        records_by_key[_snapshot_key(record)] = record
 
-    if not records:
-        return pd.DataFrame(columns=RECENT_PRICE_SNAPSHOT_COLUMNS)
-
-    unique_key = [
-        "item_code", "variety_code", "grade_code", "price_date",
-        "product_cls_code", "unit", "unit_size",
-    ]
-    return (
-        pd.DataFrame.from_records(records, columns=RECENT_PRICE_SNAPSHOT_COLUMNS)
-        .drop_duplicates(subset=unique_key, keep="last")
-        .sort_values(["price_date", "product_cls_code", "item_code", "variety_code", "grade_code"])
-        .reset_index(drop=True)
-    )
+    return sorted(records_by_key.values(), key=_snapshot_sort_key)
 
 
-def create_kamis_dimensions(snapshot_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+def _unique_rows(
+    snapshot_rows: list[dict[str, object]],
+    identity_columns: tuple[str, ...],
+    output_columns: tuple[str, ...],
+) -> list[dict[str, object]]:
+    rows_by_key: dict[tuple[object, ...], dict[str, object]] = {}
+    for source_row in snapshot_rows:
+        key = tuple(source_row[column] for column in identity_columns)
+        rows_by_key[key] = {column: source_row[column] for column in output_columns}
+    return [rows_by_key[key] for key in sorted(rows_by_key)]
+
+
+def create_kamis_dimensions(
+    snapshot_rows: list[dict[str, object]],
+) -> dict[str, list[dict[str, object]]]:
     """Build normalized KAMIS dimensions from canonical snapshot rows."""
-    category_df = (
-        snapshot_df[["category_code", "category_name"]]
-        .drop_duplicates(subset=["category_code"], keep="last")
-        .sort_values("category_code")
-        .reset_index(drop=True)
-    )
-    product_df = (
-        snapshot_df[["item_code", "item_name", "category_code"]]
-        .drop_duplicates(subset=["item_code"], keep="last")
-        .sort_values("item_code")
-        .reset_index(drop=True)
-    )
-    variant_df = (
-        snapshot_df[["item_code", "variety_code", "variety_name"]]
-        .drop_duplicates(subset=["item_code", "variety_code"], keep="last")
-        .sort_values(["item_code", "variety_code"])
-        .reset_index(drop=True)
-    )
-    grade_df = (
-        snapshot_df[["grade_code", "grade_name"]]
-        .drop_duplicates(subset=["grade_code"], keep="last")
-        .sort_values("grade_code")
-        .reset_index(drop=True)
-    )
     return {
-        "category": category_df,
-        "product": product_df,
-        "product_variant": variant_df,
-        "grade": grade_df,
+        "category": _unique_rows(snapshot_rows, ("category_code",), ("category_code", "category_name")),
+        "product": _unique_rows(snapshot_rows, ("item_code",), ("item_code", "item_name", "category_code")),
+        "product_variant": _unique_rows(
+            snapshot_rows,
+            ("item_code", "variety_code"),
+            ("item_code", "variety_code", "variety_name"),
+        ),
+        "grade": _unique_rows(snapshot_rows, ("grade_code",), ("grade_code", "grade_name")),
     }

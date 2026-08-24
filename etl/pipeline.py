@@ -5,7 +5,7 @@ from pathlib import Path
 
 from config import API_OUTPUT_DIR, SCHEMA_PATH, ensure_directories
 from db import engine as default_engine
-from etl.api_extract import fetch_recent_kamis_prices
+from etl.api_extract import KamisApiError, fetch_recent_kamis_prices
 from etl.api_transform import RECENT_PRICE_SNAPSHOT_COLUMNS, create_kamis_dimensions, normalize_kamis_prices
 from etl.load import ensure_schema, load_kamis_outputs
 
@@ -34,6 +34,8 @@ def write_csv(
 def run_pipeline(engine=default_engine) -> dict[str, object]:
     ensure_directories()
     snapshot_rows = normalize_kamis_prices(fetch_recent_kamis_prices())
+    if not snapshot_rows:
+        raise KamisApiError("KAMIS API returned no valid price rows")
     dimensions = create_kamis_dimensions(snapshot_rows)
 
     ensure_schema(SCHEMA_PATH, engine=engine)

@@ -4,10 +4,23 @@ import unittest
 from unittest.mock import patch
 
 from etl.api_transform import RECENT_PRICE_SNAPSHOT_COLUMNS
+from etl.api_extract import KamisApiError
 from etl.pipeline import run_pipeline, write_csv
 
 
 class PipelineTests(unittest.TestCase):
+    def test_run_pipeline_rejects_empty_kamis_data(self):
+        response = {"body": {"items": {"item": []}}}
+        with patch("etl.pipeline.fetch_recent_kamis_prices", return_value=response), \
+            patch("etl.pipeline.ensure_schema") as ensure_schema:
+            with self.assertRaisesRegex(
+                KamisApiError,
+                "KAMIS API returned no valid price rows",
+            ):
+                run_pipeline()
+
+        ensure_schema.assert_not_called()
+
     def test_write_csv_preserves_bom_header_and_empty_output(self):
         with TemporaryDirectory() as temp_dir:
             output = write_csv(

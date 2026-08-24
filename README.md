@@ -17,7 +17,7 @@ KAMIS Open API에서 농산물 가격 데이터를 수집하고, 응답 데이�
 - Power BI에서 읽을 수 있는 UTF-8 BOM CSV 생성
 - FastAPI 가격 조회, 품목명 검색, 도·소매 필터, 페이지네이션
 - Jinja2 기반 웹 검색 화면
-- SQLite 데모 데이터와 `/health` 준비 상태 확인
+- SQLite 데모 및 Render KAMIS 데이터와 `/health` 준비 상태 확인
 - GitHub Actions 테스트와 Render Blueprint 배포
 
 ## 데이터 흐름
@@ -181,11 +181,19 @@ python -m compileall -q config.py etl tools web tests
 
 - 서비스명: `smartshopping`
 - 빌드: `pip install -r requirements.txt`
-- 시작: `python tools/seed_demo_db.py && uvicorn web.app:app --host 0.0.0.0 --port $PORT`
+- 시작: `python main.py && uvicorn web.app:app --host 0.0.0.0 --port $PORT`
 - 상태 확인: `/health`
 - `main` 자동 배포
 
-현재 Render 웹서비스는 배포 시 SQLite 데모 데이터를 적재합니다. 운영 MySQL 데이터를 웹에서 조회하려면 Render 환경 변수 `DATABASE_URL`에 MySQL SQLAlchemy URL을 설정합니다.
+Render는 웹서버를 시작하기 전에 `python main.py`로 KAMIS 전체 데이터를 SQLite에
+수집·적재합니다. Blueprint를 처음 동기화할 때 Render 대시보드에서
+`KAMIS_SERVICE_KEY`의 비밀값을 입력해야 하며, 키를 저장소나 `render.yaml`에 직접
+기록하면 안 됩니다.
+
+무료 서비스의 SQLite 파일은 영구 디스크가 아니므로 재배포·재시작 시 KAMIS 데이터를
+다시 수집합니다. API 오류, 잘못된 키 또는 유효 데이터 0건이면 Uvicorn을 시작하지 않아
+빈 서비스가 정상 배포되는 것을 막습니다. `tools/seed_demo_db.py`의 6건 샘플은 로컬 개발과
+CI 스모크 테스트에만 사용됩니다.
 
 ## 프로젝트 구조
 
@@ -196,7 +204,9 @@ SmartShopping/
 │  ├─ api_transform.py     # list/dict 기반 정규화와 차원 생성
 │  ├─ load.py              # SQLAlchemy KAMIS upsert
 │  └─ pipeline.py          # CSV 및 DB 파이프라인 조정
-├─ sql/schema.sql          # MySQL KAMIS 스키마와 분석 View
+├─ sql/
+│  ├─ schema.sql           # MySQL KAMIS 스키마와 분석 View
+│  └─ sqlite_schema.sql    # Render·로컬 SQLite KAMIS 스키마
 ├─ web/                    # FastAPI, 조회 서비스, 템플릿과 정적 파일
 ├─ tools/
 │  ├─ seed_demo_db.py      # SQLite 데모 데이터

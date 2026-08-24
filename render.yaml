@@ -6,5 +6,10 @@ services:
     branch: main
     autoDeploy: true
     buildCommand: pip install -r requirements.txt
-    startCommand: python tools/seed_demo_db.py && uvicorn web.app:app --host 0.0.0.0 --port $PORT
+    startCommand: python main.py && uvicorn web.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    envVars:
+      - key: DB_DRIVER
+        value: sqlite
+      - key: KAMIS_SERVICE_KEY
+        sync: false

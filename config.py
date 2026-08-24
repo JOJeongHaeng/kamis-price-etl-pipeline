@@ -9,6 +9,7 @@ DATA_DIR = BASE_DIR / "data"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 API_OUTPUT_DIR = PROCESSED_DATA_DIR / "api_price"
 SCHEMA_PATH = BASE_DIR / "sql" / "schema.sql"
+SQLITE_SCHEMA_PATH = BASE_DIR / "sql" / "sqlite_schema.sql"
 
 KAMIS_API_URL = os.getenv("KAMIS_API_URL", "https://apis.data.go.kr/B552845/recent/price")
 KAMIS_SERVICE_KEY = os.getenv("KAMIS_SERVICE_KEY", "")

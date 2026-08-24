@@ -25,6 +25,22 @@ class DeploymentConfigTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_render_syncs_kamis_to_shared_sqlite_before_startup(self):
+        blueprint = load_yaml(PROJECT_ROOT / "render.yaml")
+        service = blueprint["services"][0]
+        environment = {
+            variable["key"]: variable
+            for variable in service.get("envVars", [])
+        }
+
+        self.assertEqual(
+            service["startCommand"],
+            "python main.py && uvicorn web.app:app --host 0.0.0.0 --port $PORT",
+        )
+        self.assertEqual(environment["DB_DRIVER"]["value"], "sqlite")
+        self.assertIs(environment["KAMIS_SERVICE_KEY"]["sync"], False)
+        self.assertNotIn("value", environment["KAMIS_SERVICE_KEY"])
+
 
 if __name__ == "__main__":
     unittest.main()

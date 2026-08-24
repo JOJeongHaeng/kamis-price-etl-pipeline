@@ -75,6 +75,48 @@ def validate_ci(config: dict[str, Any]) -> list[str]:
     return violations
 
 
+def validate_render(config: dict[str, Any], python_version: str) -> list[str]:
+    """Return semantic violations of the SmartShopping Render contract."""
+    violations: list[str] = []
+    services = config.get("services", [])
+    _expect(
+        violations,
+        isinstance(services, list) and len(services) == 1,
+        "blueprint must define exactly one service",
+    )
+    service = services[0] if isinstance(services, list) and services else {}
+    expected = {
+        "type": "web",
+        "runtime": "python",
+        "plan": "free",
+        "branch": "main",
+        "autoDeploy": True,
+        "buildCommand": "pip install -r requirements.txt",
+        "startCommand": (
+            "python tools/seed_demo_db.py && "
+            "uvicorn web.app:app --host 0.0.0.0 --port $PORT"
+        ),
+        "healthCheckPath": "/health",
+    }
+    for key, value in expected.items():
+        _expect(
+            violations,
+            isinstance(service, dict) and service.get(key) == value,
+            f"Render service must set {key} to {value!r}",
+        )
+    _expect(
+        violations,
+        python_version == "3.13",
+        ".python-version must contain 3.13",
+    )
+    _expect(
+        violations,
+        isinstance(service, dict) and "disk" not in service,
+        "free demo service must not define a persistent disk",
+    )
+    return violations
+
+
 def _branches(triggers: object, event: str) -> object:
     if not isinstance(triggers, dict):
         return None

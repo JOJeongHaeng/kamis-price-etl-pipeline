@@ -34,8 +34,14 @@ def create_app(
         StaticFiles(directory=str(WEB_DIR / "static")),
         name="static",
     )
-    price_service = service or PriceService(PriceRepository(create_web_engine()))
-    readiness_engine = health_engine or create_web_engine()
+    if service is None:
+        readiness_engine = health_engine or create_web_engine()
+        price_service = PriceService(PriceRepository(readiness_engine))
+    else:
+        price_service = service
+        service_repository = getattr(service, "repository", None)
+        service_engine = getattr(service_repository, "engine", None)
+        readiness_engine = health_engine or service_engine or create_web_engine()
 
     @application.get("/health")
     async def health():

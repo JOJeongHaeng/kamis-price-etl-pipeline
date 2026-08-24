@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import httpx2
 from sqlalchemy import event, text
@@ -29,6 +30,24 @@ class WebHealthTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_health_returns_ready_for_seeded_database(self):
         response = await self.client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "database": "ready"},
+        )
+
+    async def test_health_reuses_database_from_injected_price_service(self):
+        empty_default_engine = create_web_engine("sqlite:///:memory:")
+        self.addAsyncCleanup(self._dispose_engine, empty_default_engine)
+        service = PriceService(PriceRepository(self.engine))
+
+        with patch("web.app.create_web_engine", return_value=empty_default_engine):
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=create_app(service)),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/health")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(

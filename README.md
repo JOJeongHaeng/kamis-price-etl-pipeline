@@ -1,4 +1,4 @@
-# 🛒 SmartShopping
+# 🛒 KAMIS 농산물 가격 데이터 파이프라인
 
 ### KAMIS Open API 기반 농산물 가격 ETL 파이프라인 및 조회 서비스
 
